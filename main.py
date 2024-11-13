@@ -89,6 +89,5 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=8)
 
-    # Fine-tune the model
-    summarizer.fine_tune(train_dataset, val_dataset, epochs=3, batch_size=8, learning_rate=5e-5)
+    summarizer.fine_tune(train_dataset, val_dataset, epochs=10, batch_size=8, learning_rate=2e-5)
     evaluate(summarizer, val_loader)
