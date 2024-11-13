@@ -3,4 +3,5 @@ transformers
 pandas
 matplotlib
 seaborn
-rouge-score
+rouge_score
+sentencepiece

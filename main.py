@@ -59,7 +59,7 @@ if __name__ == "__main__":
     df = pd.read_csv('preprocessed_data.csv')
 
     # Use only 0.02% of the dataset for fine-tuning
-    sample_df = df.sample(frac=0.002, random_state=42)
+    sample_df = df.sample(frac=0.1, random_state=42)
 
     # Print the size of the dataset
     print(f"Total dataset size: {len(df)}")
@@ -77,6 +77,10 @@ if __name__ == "__main__":
     summarizer = TextSummarizer()
     train_dataset = SummarizationDataset(train_df, summarizer.tokenizer)
     val_dataset = SummarizationDataset(val_df, summarizer.tokenizer)
+    
+    train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=8)
 
     # Fine-tune the model
     summarizer.fine_tune(train_dataset, val_dataset, epochs=3, batch_size=8, learning_rate=5e-5)
+    evaluate(summarizer, val_loader)

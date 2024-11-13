@@ -1,6 +1,8 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import T5ForConditionalGeneration, T5Tokenizer, AdamW
+from rouge_score import rouge_scorer
+
 
 class TextSummarizer:
     def __init__(self, model_name='t5-small'):
@@ -41,10 +43,15 @@ class TextSummarizer:
             print(f"Epoch {epoch + 1}, Training Loss: {avg_train_loss}")
 
             self.evaluate(val_loader)
+            self.save_model(epoch + 1)
 
-    def evaluate(self, val_loader):
+    def evaluate(self,val_loader):
         self.model.eval()
         total_loss = 0
+        rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
+        all_hypotheses = []
+        all_references = []
+
         with torch.no_grad():
             for batch in val_loader:
                 input_ids = batch['input_ids'].to(self.device)
@@ -55,8 +62,23 @@ class TextSummarizer:
                 loss = outputs.loss
                 total_loss += loss.item()
 
+                # Generate summaries
+                summaries = self.model.generate(input_ids=input_ids, attention_mask=attention_mask)
+                decoded_summaries = [self.tokenizer.decode(s, skip_special_tokens=True) for s in summaries]
+                decoded_labels = [self.tokenizer.decode(l, skip_special_tokens=True) for l in labels]
+
+                all_hypotheses.extend(decoded_summaries)
+                all_references.extend(decoded_labels)
+
         avg_val_loss = total_loss / len(val_loader)
+        rouge_scores = rouge.get_scores(all_hypotheses, all_references, avg=True)
         print(f"Validation Loss: {avg_val_loss}")
+        print(f"ROUGE Scores: {rouge_scores}")
+
+    def save_model(self, epoch):
+        model_save_path = f"t5_summarizer_epoch_{epoch}.pt"
+        torch.save(self.model.state_dict(), model_save_path)
+        print(f"Model saved to {model_save_path}")
 
 class SummarizationDataset(Dataset):
     def __init__(self, dataframe, tokenizer, max_length=512):
