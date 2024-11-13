@@ -45,7 +45,7 @@ class TextSummarizer:
             self.evaluate(val_loader)
             self.save_model(epoch + 1)
 
-    def evaluate(self,val_loader):
+    def evaluate(self, val_loader):
         self.model.eval()
         total_loss = 0
         rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
@@ -71,7 +71,15 @@ class TextSummarizer:
                 all_references.extend(decoded_labels)
 
         avg_val_loss = total_loss / len(val_loader)
-        rouge_scores = rouge.get_scores(all_hypotheses, all_references, avg=True)
+        rouge_scores = {key: 0 for key in rouge.score(decoded_summaries[0], decoded_labels[0]).keys()}
+        for hyp, ref in zip(all_hypotheses, all_references):
+            scores = rouge.score(hyp, ref)
+            for key in scores:
+                rouge_scores[key] += scores[key].fmeasure
+
+        for key in rouge_scores:
+            rouge_scores[key] /= len(all_hypotheses)
+
         print(f"Validation Loss: {avg_val_loss}")
         print(f"ROUGE Scores: {rouge_scores}")
 

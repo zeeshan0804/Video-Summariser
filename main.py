@@ -50,7 +50,15 @@ def evaluate(model, val_loader):
             all_references.extend(decoded_labels)
 
     avg_val_loss = total_loss / len(val_loader)
-    rouge_scores = rouge.get_scores(all_hypotheses, all_references, avg=True)
+    rouge_scores = {key: 0 for key in rouge.score(decoded_summaries[0], decoded_labels[0]).keys()}
+    for hyp, ref in zip(all_hypotheses, all_references):
+        scores = rouge.score(hyp, ref)
+        for key in scores:
+            rouge_scores[key] += scores[key].fmeasure
+
+    for key in rouge_scores:
+        rouge_scores[key] /= len(all_hypotheses)
+
     print(f"Validation Loss: {avg_val_loss}")
     print(f"ROUGE Scores: {rouge_scores}")
 
@@ -59,7 +67,7 @@ if __name__ == "__main__":
     df = pd.read_csv('preprocessed_data.csv')
 
     # Use only 0.02% of the dataset for fine-tuning
-    sample_df = df.sample(frac=0.1, random_state=42)
+    sample_df = df.sample(frac=0.002, random_state=42)
 
     # Print the size of the dataset
     print(f"Total dataset size: {len(df)}")
