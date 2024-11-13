@@ -6,9 +6,11 @@ class TextSummarizer:
     def __init__(self, model_name='t5-small'):
         self.tokenizer = T5Tokenizer.from_pretrained(model_name)
         self.model = T5ForConditionalGeneration.from_pretrained(model_name)
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.model.to(self.device)
 
     def summarize(self, text, max_length=150):
-        inputs = self.tokenizer.encode("summarize: " + text, return_tensors="pt", max_length=512, truncation=True)
+        inputs = self.tokenizer.encode("summarize: " + text, return_tensors="pt", max_length=512, truncation=True).to(self.device)
         summary_ids = self.model.generate(inputs, max_length=max_length, min_length=30, length_penalty=2.0, num_beams=4, early_stopping=True)
         summary = self.tokenizer.decode(summary_ids[0], skip_special_tokens=True)
         return summary
@@ -24,9 +26,9 @@ class TextSummarizer:
             total_loss = 0
             for batch in train_loader:
                 optimizer.zero_grad()
-                input_ids = batch['input_ids'].to(self.model.device)
-                attention_mask = batch['attention_mask'].to(self.model.device)
-                labels = batch['labels'].to(self.model.device)
+                input_ids = batch['input_ids'].to(self.device)
+                attention_mask = batch['attention_mask'].to(self.device)
+                labels = batch['labels'].to(self.device)
 
                 outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
                 loss = outputs.loss
@@ -45,9 +47,9 @@ class TextSummarizer:
         total_loss = 0
         with torch.no_grad():
             for batch in val_loader:
-                input_ids = batch['input_ids'].to(self.model.device)
-                attention_mask = batch['attention_mask'].to(self.model.device)
-                labels = batch['labels'].to(self.model.device)
+                input_ids = batch['input_ids'].to(self.device)
+                attention_mask = batch['attention_mask'].to(self.device)
+                labels = batch['labels'].to(self.device)
 
                 outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
                 loss = outputs.loss
