@@ -58,25 +58,25 @@ if __name__ == "__main__":
     # Load preprocessed data
     df = pd.read_csv('preprocessed_data.csv')
 
+    # Use only 0.02% of the dataset for fine-tuning
+    sample_df = df.sample(frac=0.002, random_state=42)
+
+    # Print the size of the dataset
+    print(f"Total dataset size: {len(df)}")
+    print(f"Sampled dataset size: {len(sample_df)}")
+
     # Split data into training and validation sets
-    train_df = df.sample(frac=0.8, random_state=42)
-    val_df = df.drop(train_df.index)
+    train_df = sample_df.sample(frac=0.8, random_state=42)
+    val_df = sample_df.drop(train_df.index)
+
+    # Print the size of the training and validation sets
+    print(f"Training set size: {len(train_df)}")
+    print(f"Validation set size: {len(val_df)}")
 
     # Create datasets
     summarizer = TextSummarizer()
     train_dataset = SummarizationDataset(train_df, summarizer.tokenizer)
     val_dataset = SummarizationDataset(val_df, summarizer.tokenizer)
 
-    # Create data loaders
-    train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=8)
-
     # Fine-tune the model
-    optimizer = AdamW(summarizer.model.parameters(), lr=5e-5)
-    epochs = 3
-
-    for epoch in range(epochs):
-        print(f"Epoch {epoch + 1}/{epochs}")
-        # evaluate(summarizer, val_loader)
-        train(summarizer, train_loader, optimizer)
-        evaluate(summarizer, val_loader)
+    summarizer.fine_tune(train_dataset, val_dataset, epochs=3, batch_size=8, learning_rate=5e-5)
