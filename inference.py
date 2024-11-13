@@ -5,8 +5,8 @@ import argparse
 def load_model(model_path, model_name='t5-small'):
     tokenizer = T5Tokenizer.from_pretrained(model_name)
     model = T5ForConditionalGeneration.from_pretrained(model_name)
-    model.load_state_dict(torch.load(model_path))
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)
     model.eval()
     return model, tokenizer, device
