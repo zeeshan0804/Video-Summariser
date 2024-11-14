@@ -8,7 +8,8 @@ from transformers import T5ForConditionalGeneration, T5Tokenizer, AdamW
 from model import TextSummarizer, SummarizationDataset
 
 def train(model, train_loader, optimizer):
-    model.model.train()
+    model.encoder.train()
+    model.decoder.train()
     total_loss = 0
     for batch in train_loader:
         optimizer.zero_grad()
@@ -16,8 +17,13 @@ def train(model, train_loader, optimizer):
         attention_mask = batch['attention_mask'].to(model.device)
         labels = batch['labels'].to(model.device)
 
-        outputs = model.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-        loss = outputs.loss
+        encoder_outputs = model.encoder.encoder(input_ids=input_ids, attention_mask=attention_mask)
+        decoder_outputs = model.decoder(
+            input_ids=labels,
+            encoder_outputs=encoder_outputs,
+            labels=labels
+        )
+        loss = decoder_outputs.loss
         total_loss += loss.item()
 
         loss.backward()
@@ -27,7 +33,8 @@ def train(model, train_loader, optimizer):
     print(f"Training Loss: {avg_train_loss}")
 
 def evaluate(model, val_loader):
-    model.model.eval()
+    model.encoder.eval()
+    model.decoder.eval()
     total_loss = 0
     rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
     all_hypotheses = []
@@ -39,12 +46,16 @@ def evaluate(model, val_loader):
             attention_mask = batch['attention_mask'].to(model.device)
             labels = batch['labels'].to(model.device)
 
-            outputs = model.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            loss = outputs.loss
+            encoder_outputs = model.encoder.encoder(input_ids=input_ids, attention_mask=attention_mask)
+            decoder_outputs = model.decoder(
+                input_ids=labels,
+                encoder_outputs=encoder_outputs,
+                labels=labels
+            )
+            loss = decoder_outputs.loss
             total_loss += loss.item()
 
-            # Generate summaries
-            summaries = model.model.generate(input_ids=input_ids, attention_mask=attention_mask)
+            summaries = model.decoder.generate(input_ids=labels, encoder_outputs=encoder_outputs)
             decoded_summaries = [model.tokenizer.decode(s, skip_special_tokens=True) for s in summaries]
             decoded_labels = [model.tokenizer.decode(l, skip_special_tokens=True) for l in labels]
 
@@ -77,11 +88,28 @@ def load_model(model_path, model_name='t5-small'):
     model.eval()
     return model, tokenizer, device
 
+def load_model(encoder_path, decoder_path, model_name='t5-small'):
+    tokenizer = T5Tokenizer.from_pretrained(model_name)
+    encoder = T5ForConditionalGeneration.from_pretrained(model_name)
+    decoder = T5ForConditionalGeneration.from_pretrained(model_name)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    encoder.load_state_dict(torch.load(encoder_path, map_location=device))
+    decoder.load_state_dict(torch.load(decoder_path, map_location=device))
+    encoder.to(device)
+    decoder.to(device)
+    encoder.eval()
+    decoder.eval()
+    return encoder, decoder, tokenizer, device
+
 if __name__ == "__main__":
     # Load preprocessed data
     df = pd.read_csv('preprocessed_data.csv')
 
+<<<<<<< HEAD
     # Use only 0.02% of the dataset for fine-tuning
+=======
+    # Use only 20% of the dataset for fine-tuning
+>>>>>>> cd94812 (Revert changes to specific files)
     sample_df = df.sample(frac=0.2, random_state=42)
 
     # Print the size of the dataset
@@ -104,6 +132,7 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=8)
 
+<<<<<<< HEAD
     model_path = 't5_summarizer_epoch_15_full_data.pt'
     if os.path.exists(model_path):
         print(f"Model file {model_path} found. Loading and evaluating the model.")
@@ -113,3 +142,16 @@ if __name__ == "__main__":
         print(f"Model file {model_path} not found. Training the model.")
         summarizer.fine_tune(train_dataset, val_dataset, epochs=15, batch_size=8, learning_rate=1e-5)
         evaluate(summarizer, val_loader)
+=======
+    encoder_path = 'encoder_epoch_15.pt'
+    decoder_path = 'decoder_epoch_15.pt'
+    if os.path.exists(encoder_path) and os.path.exists(decoder_path):
+        print(f"Model files {encoder_path} and {decoder_path} found. Loading and evaluating the models.")
+        summarizer.encoder.load_state_dict(torch.load(encoder_path, map_location=summarizer.device))
+        summarizer.decoder.load_state_dict(torch.load(decoder_path, map_location=summarizer.device))
+        evaluate(summarizer, val_loader)
+    else:
+        print(f"Model files {encoder_path} and {decoder_path} not found. Training the models.")
+        summarizer.fine_tune(train_dataset, val_dataset, epochs=15, batch_size=8, learning_rate=1e-5)
+        evaluate(summarizer, val_loader)
+>>>>>>> cd94812 (Revert changes to specific files)

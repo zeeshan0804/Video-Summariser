@@ -3,18 +3,38 @@ from torch.utils.data import Dataset, DataLoader
 from transformers import T5ForConditionalGeneration, T5Tokenizer, AdamW
 from rouge_score import rouge_scorer
 from transformers import get_linear_schedule_with_warmup
+<<<<<<< HEAD
 
 
 class TextSummarizer:
     def __init__(self, model_name='t5-base'):
         self.tokenizer = T5Tokenizer.from_pretrained(model_name)
         self.model = T5ForConditionalGeneration.from_pretrained(model_name)
+=======
+
+class TextSummarizer:
+    def __init__(self, encoder_model_name='t5-small', decoder_model_name='t5-small'):
+        self.tokenizer = T5Tokenizer.from_pretrained(encoder_model_name)
+        self.encoder = T5ForConditionalGeneration.from_pretrained(encoder_model_name)
+        self.decoder = T5ForConditionalGeneration.from_pretrained(decoder_model_name)
+>>>>>>> cd94812 (Revert changes to specific files)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model.to(self.device)
+        self.encoder.to(self.device)
+        self.decoder.to(self.device)
 
     def summarize(self, text, max_length=150):
         inputs = self.tokenizer.encode("summarize: " + text, return_tensors="pt", max_length=512, truncation=True).to(self.device)
-        summary_ids = self.model.generate(inputs, max_length=max_length, min_length=30, length_penalty=2.0, num_beams=4, early_stopping=True)
+        encoder_outputs = self.encoder.encoder(inputs)
+        decoder_input_ids = torch.tensor([[self.tokenizer.pad_token_id]], device=self.device)
+        summary_ids = self.decoder.generate(
+            input_ids=decoder_input_ids,
+            encoder_outputs=encoder_outputs,
+            max_length=max_length,
+            min_length=30,
+            length_penalty=2.0,
+            num_beams=4,
+            early_stopping=True
+        )
         summary = self.tokenizer.decode(summary_ids[0], skip_special_tokens=True)
         return summary
 
@@ -24,10 +44,18 @@ class TextSummarizer:
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
+<<<<<<< HEAD
         optimizer = AdamW(self.model.parameters(), lr=learning_rate)
         total_steps = len(train_loader) * epochs
         scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
         self.model.train()
+=======
+        optimizer = AdamW(list(self.encoder.parameters()) + list(self.decoder.parameters()), lr=learning_rate)
+        total_steps = len(train_loader) * epochs
+        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
+        self.encoder.train()
+        self.decoder.train()
+>>>>>>> cd94812 (Revert changes to specific files)
 
         for epoch in range(epochs):
             total_loss = 0
@@ -37,8 +65,13 @@ class TextSummarizer:
                 attention_mask = batch['attention_mask'].to(self.device)
                 labels = batch['labels'].to(self.device)
 
-                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-                loss = outputs.loss
+                encoder_outputs = self.encoder.encoder(input_ids=input_ids, attention_mask=attention_mask)
+                decoder_outputs = self.decoder(
+                    input_ids=labels,
+                    encoder_outputs=encoder_outputs,
+                    labels=labels
+                )
+                loss = decoder_outputs.loss
                 total_loss += loss.item()
 
                 loss.backward()
@@ -52,7 +85,8 @@ class TextSummarizer:
             self.save_model(epoch + 1)
             
     def evaluate(self, val_loader):
-        self.model.eval()
+        self.encoder.eval()
+        self.decoder.eval()
         total_loss = 0
         rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
         all_hypotheses = []
@@ -64,12 +98,16 @@ class TextSummarizer:
                 attention_mask = batch['attention_mask'].to(self.device)
                 labels = batch['labels'].to(self.device)
 
-                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-                loss = outputs.loss
+                encoder_outputs = self.encoder.encoder(input_ids=input_ids, attention_mask=attention_mask)
+                decoder_outputs = self.decoder(
+                    input_ids=labels,
+                    encoder_outputs=encoder_outputs,
+                    labels=labels
+                )
+                loss = decoder_outputs.loss
                 total_loss += loss.item()
 
-                # Generate summaries
-                summaries = self.model.generate(input_ids=input_ids, attention_mask=attention_mask)
+                summaries = self.decoder.generate(input_ids=labels, encoder_outputs=encoder_outputs)
                 decoded_summaries = [self.tokenizer.decode(s, skip_special_tokens=True) for s in summaries]
                 decoded_labels = [self.tokenizer.decode(l, skip_special_tokens=True) for l in labels]
 
@@ -90,9 +128,12 @@ class TextSummarizer:
         print(f"ROUGE Scores: {rouge_scores}")
 
     def save_model(self, epoch):
-        model_save_path = f"t5_summarizer_epoch_{epoch}.pt"
-        torch.save(self.model.state_dict(), model_save_path)
-        print(f"Model saved to {model_save_path}")
+        encoder_save_path = f"encoder_epoch_{epoch}.pt"
+        decoder_save_path = f"decoder_epoch_{epoch}.pt"
+        torch.save(self.encoder.state_dict(), encoder_save_path)
+        torch.save(self.decoder.state_dict(), decoder_save_path)
+        print(f"Encoder model saved to {encoder_save_path}")
+        print(f"Decoder model saved to {decoder_save_path}")
 
 class SummarizationDataset(Dataset):
     def __init__(self, dataframe, tokenizer, max_length=512):
@@ -128,23 +169,3 @@ class SummarizationDataset(Dataset):
             'attention_mask': inputs['attention_mask'].flatten(),
             'labels': labels['input_ids'].flatten()
         }
-
-# # Example usage
-# if __name__ == "__main__":
-#     import pandas as pd
-
-#     # Load preprocessed data
-#     df = pd.read_csv('preprocessed_data.csv')
-
-#     # Split data into training and validation sets
-#     train_df = df.sample(frac=0.8, random_state=42)
-#     val_df = df.drop(train_df.index)
-
-#     # Create datasets
-#     tokenizer = T5Tokenizer.from_pretrained('t5-small')
-#     train_dataset = SummarizationDataset(train_df, tokenizer)
-#     val_dataset = SummarizationDataset(val_df, tokenizer)
-
-#     # Fine-tune the model
-#     summarizer = TextSummarizer()
-#     summarizer.fine_tune(train_dataset, val_dataset)
