@@ -2,10 +2,11 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import T5ForConditionalGeneration, T5Tokenizer, AdamW
 from rouge_score import rouge_scorer
+from transformers import get_linear_schedule_with_warmup
 
 
 class TextSummarizer:
-    def __init__(self, model_name='t5-small'):
+    def __init__(self, model_name='t5-base'):
         self.tokenizer = T5Tokenizer.from_pretrained(model_name)
         self.model = T5ForConditionalGeneration.from_pretrained(model_name)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -17,11 +18,15 @@ class TextSummarizer:
         summary = self.tokenizer.decode(summary_ids[0], skip_special_tokens=True)
         return summary
 
+    from transformers import get_linear_schedule_with_warmup
+
     def fine_tune(self, train_dataset, val_dataset, epochs=3, batch_size=8, learning_rate=5e-5):
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
         optimizer = AdamW(self.model.parameters(), lr=learning_rate)
+        total_steps = len(train_loader) * epochs
+        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
         self.model.train()
 
         for epoch in range(epochs):
@@ -38,13 +43,14 @@ class TextSummarizer:
 
                 loss.backward()
                 optimizer.step()
+                scheduler.step()
 
             avg_train_loss = total_loss / len(train_loader)
             print(f"Epoch {epoch + 1}, Training Loss: {avg_train_loss}")
 
             self.evaluate(val_loader)
             self.save_model(epoch + 1)
-
+            
     def evaluate(self, val_loader):
         self.model.eval()
         total_loss = 0

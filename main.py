@@ -1,8 +1,10 @@
+import os
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 from transformers import AdamW
 from rouge_score import rouge_scorer
+from transformers import T5ForConditionalGeneration, T5Tokenizer, AdamW
 from model import TextSummarizer, SummarizationDataset
 
 def train(model, train_loader, optimizer):
@@ -51,30 +53,43 @@ def evaluate(model, val_loader):
 
     avg_val_loss = total_loss / len(val_loader)
     rouge_scores = {key: 0 for key in rouge.score(decoded_summaries[0], decoded_labels[0]).keys()}
+    f_scores = {key: 0 for key in rouge.score(decoded_summaries[0], decoded_labels[0]).keys()}
     for hyp, ref in zip(all_hypotheses, all_references):
         scores = rouge.score(hyp, ref)
         for key in scores:
             rouge_scores[key] += scores[key].fmeasure
+            f_scores[key] += scores[key].fmeasure
 
     for key in rouge_scores:
         rouge_scores[key] /= len(all_hypotheses)
+        f_scores[key] /= len(all_hypotheses)
 
     print(f"Validation Loss: {avg_val_loss}")
     print(f"ROUGE Scores: {rouge_scores}")
+    print(f"F-Scores: {f_scores}")
+    
+def load_model(model_path, model_name='t5-small'):
+    tokenizer = T5Tokenizer.from_pretrained(model_name)
+    model = T5ForConditionalGeneration.from_pretrained(model_name)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.to(device)
+    model.eval()
+    return model, tokenizer, device
 
 if __name__ == "__main__":
     # Load preprocessed data
     df = pd.read_csv('preprocessed_data.csv')
 
     # Use only 0.02% of the dataset for fine-tuning
-    sample_df = df.sample(frac=1, random_state=42)
+    sample_df = df.sample(frac=0.2, random_state=42)
 
     # Print the size of the dataset
     print(f"Total dataset size: {len(df)}")
     print(f"Sampled dataset size: {len(sample_df)}")
 
     # Split data into training and validation sets
-    train_df = sample_df.sample(frac=0.8, random_state=42)
+    train_df = sample_df.sample(frac=0.9, random_state=42)
     val_df = sample_df.drop(train_df.index)
 
     # Print the size of the training and validation sets
@@ -89,5 +104,12 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=8)
 
-    summarizer.fine_tune(train_dataset, val_dataset, epochs=15, batch_size=8, learning_rate=3e-5)
-    evaluate(summarizer, val_loader)
+    model_path = 't5_summarizer_epoch_15_full_data.pt'
+    if os.path.exists(model_path):
+        print(f"Model file {model_path} found. Loading and evaluating the model.")
+        summarizer.model.load_state_dict(torch.load(model_path, map_location=summarizer.device))
+        evaluate(summarizer, val_loader)
+    else:
+        print(f"Model file {model_path} not found. Training the model.")
+        summarizer.fine_tune(train_dataset, val_dataset, epochs=15, batch_size=8, learning_rate=1e-5)
+        evaluate(summarizer, val_loader)
