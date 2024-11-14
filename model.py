@@ -3,21 +3,12 @@ from torch.utils.data import Dataset, DataLoader
 from transformers import T5ForConditionalGeneration, T5Tokenizer, AdamW
 from rouge_score import rouge_scorer
 from transformers import get_linear_schedule_with_warmup
-<<<<<<< HEAD
-
-
-class TextSummarizer:
-    def __init__(self, model_name='t5-base'):
-        self.tokenizer = T5Tokenizer.from_pretrained(model_name)
-        self.model = T5ForConditionalGeneration.from_pretrained(model_name)
-=======
 
 class TextSummarizer:
     def __init__(self, encoder_model_name='t5-small', decoder_model_name='t5-small'):
         self.tokenizer = T5Tokenizer.from_pretrained(encoder_model_name)
         self.encoder = T5ForConditionalGeneration.from_pretrained(encoder_model_name)
         self.decoder = T5ForConditionalGeneration.from_pretrained(decoder_model_name)
->>>>>>> cd94812 (Revert changes to specific files)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.encoder.to(self.device)
         self.decoder.to(self.device)
@@ -38,24 +29,15 @@ class TextSummarizer:
         summary = self.tokenizer.decode(summary_ids[0], skip_special_tokens=True)
         return summary
 
-    from transformers import get_linear_schedule_with_warmup
-
     def fine_tune(self, train_dataset, val_dataset, epochs=3, batch_size=8, learning_rate=5e-5):
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
-<<<<<<< HEAD
-        optimizer = AdamW(self.model.parameters(), lr=learning_rate)
-        total_steps = len(train_loader) * epochs
-        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
-        self.model.train()
-=======
         optimizer = AdamW(list(self.encoder.parameters()) + list(self.decoder.parameters()), lr=learning_rate)
         total_steps = len(train_loader) * epochs
         scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
         self.encoder.train()
         self.decoder.train()
->>>>>>> cd94812 (Revert changes to specific files)
 
         for epoch in range(epochs):
             total_loss = 0
@@ -83,7 +65,7 @@ class TextSummarizer:
 
             self.evaluate(val_loader)
             self.save_model(epoch + 1)
-            
+
     def evaluate(self, val_loader):
         self.encoder.eval()
         self.decoder.eval()
