@@ -1,114 +1,143 @@
-import os
-import pandas as pd
 import torch
-from torch.utils.data import DataLoader
-from transformers import AdamW
-from rouge_score import rouge_scorer
+from torch.utils.data import Dataset, DataLoader
 from transformers import BartForConditionalGeneration, BartTokenizer, AdamW
-from model2 import BartSummarizer, SummarizationDataset
+from rouge_score import rouge_scorer
+from transformers import get_linear_schedule_with_warmup
 
-def train(model, train_loader, optimizer):
-    model.model.train()
-    total_loss = 0
-    for batch in train_loader:
-        optimizer.zero_grad()
-        input_ids = batch['input_ids'].to(model.device)
-        attention_mask = batch['attention_mask'].to(model.device)
-        labels = batch['labels'].to(model.device)
+class BartSummarizer:
+    def __init__(self, model_name='facebook/bart-base'):
+        self.tokenizer = BartTokenizer.from_pretrained(model_name)
+        self.model = BartForConditionalGeneration.from_pretrained(model_name)
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.model.to(self.device)
 
-        outputs = model.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-        logits = outputs.logits
-        predictions = model.tokenizer.batch_decode(logits.argmax(dim=-1), skip_special_tokens=True)
-        references = model.tokenizer.batch_decode(labels, skip_special_tokens=True)
+    def summarize(self, text, max_length=150):
+        inputs = self.tokenizer.encode("summarize: " + text, return_tensors="pt", max_length=512, truncation=True).to(self.device)
+        summary_ids = self.model.generate(
+            inputs,
+            max_length=max_length,
+            min_length=30,
+            length_penalty=2.0,
+            num_beams=4,
+            early_stopping=True
+        )
+        summary = self.tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+        return summary
 
-        rouge_loss = sum(model.compute_rouge_loss(pred, ref) for pred, ref in zip(predictions, references)) / len(predictions)
-        total_loss += rouge_loss.item()
+    def compute_rouge_loss(self, predictions, references):
+        scorer = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
+        rouge_scores = scorer.score(predictions, references)
+        rouge_loss = 1 - (rouge_scores['rouge1'].fmeasure + rouge_scores['rougeL'].fmeasure) / 2
+        return rouge_loss
 
-        rouge_loss.backward()
-        optimizer.step()
+    def fine_tune(self, train_dataset, val_dataset, epochs=3, batch_size=8, learning_rate=5e-5):
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
-    avg_train_loss = total_loss / len(train_loader)
-    print(f"Training Loss: {avg_train_loss}")
+        optimizer = AdamW(self.model.parameters(), lr=learning_rate)
+        total_steps = len(train_loader) * epochs
+        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
+        self.model.train()
 
-def evaluate(model, val_loader):
-    model.model.eval()
-    total_loss = 0
-    rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
-    all_hypotheses = []
-    all_references = []
+        for epoch in range(epochs):
+            total_loss = 0
+            for batch in train_loader:
+                optimizer.zero_grad()
+                input_ids = batch['input_ids'].to(self.device)
+                attention_mask = batch['attention_mask'].to(self.device)
+                labels = batch['labels'].to(self.device)
 
-    with torch.no_grad():
-        for batch in val_loader:
-            input_ids = batch['input_ids'].to(model.device)
-            attention_mask = batch['attention_mask'].to(model.device)
-            labels = batch['labels'].to(model.device)
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+                logits = outputs.logits
+                predictions = self.tokenizer.batch_decode(logits.argmax(dim=-1), skip_special_tokens=True)
+                references = self.tokenizer.batch_decode(labels, skip_special_tokens=True)
 
-            outputs = model.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            logits = outputs.logits
-            predictions = model.tokenizer.batch_decode(logits.argmax(dim=-1), skip_special_tokens=True)
-            references = model.tokenizer.batch_decode(labels, skip_special_tokens=True)
+                rouge_loss = sum(self.compute_rouge_loss(pred, ref) for pred, ref in zip(predictions, references)) / len(predictions)
+                total_loss += rouge_loss.item()
 
-            rouge_loss = sum(model.compute_rouge_loss(pred, ref) for pred, ref in zip(predictions, references)) / len(predictions)
-            total_loss += rouge_loss.item()
+                rouge_loss.backward()
+                optimizer.step()
+                scheduler.step()
 
-            all_hypotheses.extend(predictions)
-            all_references.extend(references)
+            avg_train_loss = total_loss / len(train_loader)
+            print(f"Epoch {epoch + 1}, Training Loss: {avg_train_loss}")
 
-    avg_val_loss = total_loss / len(val_loader)
-    rouge_scores = {key: 0 for key in rouge.score(all_hypotheses[0], all_references[0]).keys()}
-    for hyp, ref in zip(all_hypotheses, all_references):
-        scores = rouge.score(hyp, ref)
-        for key in scores:
-            rouge_scores[key] += scores[key].fmeasure
+            self.evaluate(val_loader)
+            self.save_model(epoch + 1)
 
-    for key in rouge_scores:
-        rouge_scores[key] /= len(all_hypotheses)
+    def evaluate(self, val_loader):
+        self.model.eval()
+        total_loss = 0
+        rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
+        all_hypotheses = []
+        all_references = []
 
-    print(f"Validation Loss: {avg_val_loss}")
-    print(f"ROUGE Scores: {rouge_scores}")
+        with torch.no_grad():
+            for batch in val_loader:
+                input_ids = batch['input_ids'].to(self.device)
+                attention_mask = batch['attention_mask'].to(self.device)
+                labels = batch['labels'].to(self.device)
 
-def load_model(model_path, model_name='facebook/bart-large-cnn'):
-    tokenizer = BartTokenizer.from_pretrained(model_name)
-    model = BartForConditionalGeneration.from_pretrained(model_name)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    model.to(device)
-    model.eval()
-    return model, tokenizer, device
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+                logits = outputs.logits
+                predictions = self.tokenizer.batch_decode(logits.argmax(dim=-1), skip_special_tokens=True)
+                references = self.tokenizer.batch_decode(labels, skip_special_tokens=True)
 
-if __name__ == "__main__":
-    # Load preprocessed data
-    df = pd.read_csv('preprocessed_data.csv')
+                rouge_loss = sum(self.compute_rouge_loss(pred, ref) for pred, ref in zip(predictions, references)) / len(predictions)
+                total_loss += rouge_loss.item()
 
-    # Use only 20% of the dataset for fine-tuning
-    sample_df = df.sample(frac=0.2, random_state=42)
+                all_hypotheses.extend(predictions)
+                all_references.extend(references)
 
-    # Print the size of the dataset
-    print(f"Total dataset size: {len(df)}")
-    print(f"Sampled dataset size: {len(sample_df)}")
+        avg_val_loss = total_loss / len(val_loader)
+        rouge_scores = {key: 0 for key in rouge.score(all_hypotheses[0], all_references[0]).keys()}
+        for hyp, ref in zip(all_hypotheses, all_references):
+            scores = rouge.score(hyp, ref)
+            for key in scores:
+                rouge_scores[key] += scores[key].fmeasure
 
-    # Split data into training and validation sets
-    train_df = sample_df.sample(frac=0.9, random_state=42)
-    val_df = sample_df.drop(train_df.index)
+        for key in rouge_scores:
+            rouge_scores[key] /= len(all_hypotheses)
 
-    # Print the size of the training and validation sets
-    print(f"Training set size: {len(train_df)}")
-    print(f"Validation set size: {len(val_df)}")
+        print(f"Validation Loss: {avg_val_loss}")
+        print(f"ROUGE Scores: {rouge_scores}")
 
-    # Create datasets
-    summarizer = BartSummarizer()
-    train_dataset = SummarizationDataset(train_df, summarizer.tokenizer)
-    val_dataset = SummarizationDataset(val_df, summarizer.tokenizer)
-    
-    train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=8)
+    def save_model(self, epoch):
+        model_save_path = f"bart_model_epoch_{epoch}.pt"
+        torch.save(self.model.state_dict(), model_save_path)
+        print(f"Model saved to {model_save_path}")
 
-    model_path = 'bart_model_epoch_15.pt'
-    if os.path.exists(model_path):
-        print(f"Model file {model_path} found. Loading and evaluating the model.")
-        summarizer.model.load_state_dict(torch.load(model_path, map_location=summarizer.device))
-        evaluate(summarizer, val_loader)
-    else:
-        print(f"Model file {model_path} not found. Training the model.")
-        summarizer.fine_tune(train_dataset, val_dataset, epochs=15, batch_size=8, learning_rate=1e-5)
-        evaluate(summarizer, val_loader)
+class SummarizationDataset(Dataset):
+    def __init__(self, dataframe, tokenizer, max_length=512):
+        self.dataframe = dataframe
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+
+    def __len__(self):
+        return len(self.dataframe)
+
+    def __getitem__(self, idx):
+        article = self.dataframe.iloc[idx]['article']
+        summary = self.dataframe.iloc[idx]['summary']
+
+        inputs = self.tokenizer.encode_plus(
+            "summarize: " + article,
+            max_length=self.max_length,
+            padding='max_length',
+            truncation=True,
+            return_tensors="pt"
+        )
+
+        labels = self.tokenizer.encode_plus(
+            summary,
+            max_length=self.max_length,
+            padding='max_length',
+            truncation=True,
+            return_tensors="pt"
+        )
+
+        return {
+            'input_ids': inputs['input_ids'].flatten(),
+            'attention_mask': inputs['attention_mask'].flatten(),
+            'labels': labels['input_ids'].flatten()
+        }
