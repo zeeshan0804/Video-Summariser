@@ -5,8 +5,10 @@ from torch.utils.data import DataLoader
 from transformers import AdamW
 from rouge_score import rouge_scorer
 from model import TextSummarizer, SummarizationDataset
-from transformers import T5ForConditionalGeneration, T5Tokenizer, AdamW
+from model2 import BartSummarizer
+from transformers import T5ForConditionalGeneration, T5Tokenizer, AdamW, BartForConditionalGeneration, BartTokenizer
 import matplotlib.pyplot as plt
+import argparse
 
 def train(model, train_loader, optimizer):
     model.model.train()
@@ -66,21 +68,43 @@ def evaluate(model, val_loader):
     print(f"ROUGE Scores: {rouge_scores}")
     return avg_val_loss, rouge_scores
 
-def load_model(model_path, model_name='google/flan-t5-small'):
-    tokenizer = T5Tokenizer.from_pretrained(model_name)
-    model = T5ForConditionalGeneration.from_pretrained(model_name)
+def load_model(model_path, model_type='t5'):
+    if model_type == 't5':
+        tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        model = T5ForConditionalGeneration.from_pretrained('t5-small')
+    elif model_type == 'bart':
+        tokenizer = BartTokenizer.from_pretrained('facebook/bart-base')
+        model = BartForConditionalGeneration.from_pretrained('facebook/bart-base')
+    else:
+        raise ValueError("Unsupported model type. Use 't5' or 'bart'")
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)
     model.eval()
     return model, tokenizer, device
 
+def generate_summary(model, tokenizer, device, text, model_type='t5', max_length=150):
+    if model_type == 't5':
+        prefix = "summarize: "
+    else:  # bart
+        prefix = "summarize: "
+    
+    inputs = tokenizer.encode(prefix + text, return_tensors="pt", max_length=512, truncation=True).to(device)
+    summary_ids = model.generate(inputs, max_length=max_length, min_length=30, length_penalty=2.0, num_beams=4, early_stopping=True)
+    summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+    return summary
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model_type', type=str, choices=['t5', 'bart'], default='t5')
+    args = parser.parse_args()
+
     # Load preprocessed data
     df = pd.read_csv('preprocessed_data.csv')
 
     # Use only 20% of the dataset for fine-tuning
-    sample_df = df.sample(frac=1, random_state=42)
+    sample_df = df.sample(frac=0.5, random_state=42)
 
     # Print the size of the dataset
     print(f"Total dataset size: {len(df)}")
@@ -95,7 +119,7 @@ if __name__ == "__main__":
     print(f"Validation set size: {len(val_df)}")
 
     # Create datasets
-    summarizer = TextSummarizer()
+    summarizer = BartSummarizer()
     train_dataset = SummarizationDataset(train_df, summarizer.tokenizer)
     val_dataset = SummarizationDataset(val_df, summarizer.tokenizer)
     
