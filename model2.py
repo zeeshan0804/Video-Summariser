@@ -1,7 +1,6 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import BartForConditionalGeneration, BartTokenizer, AdamW
-from rouge_score import rouge_scorer
 from transformers import get_linear_schedule_with_warmup
 
 class BartSummarizer:
@@ -24,12 +23,6 @@ class BartSummarizer:
         summary = self.tokenizer.decode(summary_ids[0], skip_special_tokens=True)
         return summary
 
-    def compute_rouge_loss(self, predictions, references):
-        scorer = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
-        rouge_scores = scorer.score(predictions, references)
-        rouge_loss = 1 - (rouge_scores['rouge1'].fmeasure + rouge_scores['rougeL'].fmeasure) / 2
-        return rouge_loss
-
     def fine_tune(self, train_dataset, val_dataset, epochs=3, batch_size=8, learning_rate=5e-5):
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=batch_size)
@@ -48,14 +41,10 @@ class BartSummarizer:
                 labels = batch['labels'].to(self.device)
 
                 outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-                logits = outputs.logits
-                predictions = self.tokenizer.batch_decode(logits.argmax(dim=-1), skip_special_tokens=True)
-                references = self.tokenizer.batch_decode(labels, skip_special_tokens=True)
+                loss = outputs.loss
+                total_loss += loss.item()
 
-                rouge_loss = sum(self.compute_rouge_loss(pred, ref) for pred, ref in zip(predictions, references)) / len(predictions)
-                total_loss += rouge_loss.item()
-
-                rouge_loss.backward()
+                loss.backward()
                 optimizer.step()
                 scheduler.step()
 
@@ -68,7 +57,6 @@ class BartSummarizer:
     def evaluate(self, val_loader):
         self.model.eval()
         total_loss = 0
-        rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
         all_hypotheses = []
         all_references = []
 
@@ -79,17 +67,18 @@ class BartSummarizer:
                 labels = batch['labels'].to(self.device)
 
                 outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-                logits = outputs.logits
-                predictions = self.tokenizer.batch_decode(logits.argmax(dim=-1), skip_special_tokens=True)
-                references = self.tokenizer.batch_decode(labels, skip_special_tokens=True)
+                loss = outputs.loss
+                total_loss += loss.item()
 
-                rouge_loss = sum(self.compute_rouge_loss(pred, ref) for pred, ref in zip(predictions, references)) / len(predictions)
-                total_loss += rouge_loss.item()
+                summaries = self.model.generate(input_ids=input_ids, attention_mask=attention_mask)
+                decoded_summaries = [self.tokenizer.decode(s, skip_special_tokens=True) for s in summaries]
+                decoded_labels = [self.tokenizer.decode(l, skip_special_tokens=True) for l in labels]
 
-                all_hypotheses.extend(predictions)
-                all_references.extend(references)
+                all_hypotheses.extend(decoded_summaries)
+                all_references.extend(decoded_labels)
 
         avg_val_loss = total_loss / len(val_loader)
+        rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
         rouge_scores = {key: 0 for key in rouge.score(all_hypotheses[0], all_references[0]).keys()}
         for hyp, ref in zip(all_hypotheses, all_references):
             scores = rouge.score(hyp, ref)
