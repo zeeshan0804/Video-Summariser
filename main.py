@@ -1,17 +1,18 @@
 import os
 import pandas as pd
+import torch.nn as nn
 import torch
 from torch.utils.data import DataLoader
 from transformers import AdamW
 from rouge_score import rouge_scorer
 from model import TextSummarizer, SummarizationDataset
-from model2 import BartSummarizer
-from transformers import T5ForConditionalGeneration, T5Tokenizer, AdamW, BartForConditionalGeneration, BartTokenizer
+from model3 import EnhancedBartSummarizer, TextSummarizer
+from transformers import BartForConditionalGeneration, BartTokenizer
 import matplotlib.pyplot as plt
 import argparse
 
 def train(model, train_loader, optimizer):
-    model.model.train()
+    model.train()
     total_loss = 0
     for batch in train_loader:
         optimizer.zero_grad()
@@ -19,8 +20,8 @@ def train(model, train_loader, optimizer):
         attention_mask = batch['attention_mask'].to(model.device)
         labels = batch['labels'].to(model.device)
 
-        outputs = model.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-        loss = outputs.loss
+        logits = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+        loss = nn.CrossEntropyLoss()(logits.view(-1, logits.size(-1)), labels.view(-1))
         total_loss += loss.item()
 
         loss.backward()
@@ -31,7 +32,7 @@ def train(model, train_loader, optimizer):
     return avg_train_loss
 
 def evaluate(model, val_loader):
-    model.model.eval()
+    model.eval()
     total_loss = 0
     rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
     all_hypotheses = []
@@ -43,11 +44,11 @@ def evaluate(model, val_loader):
             attention_mask = batch['attention_mask'].to(model.device)
             labels = batch['labels'].to(model.device)
 
-            outputs = model.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            loss = outputs.loss
+            logits = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            loss = nn.CrossEntropyLoss()(logits.view(-1, logits.size(-1)), labels.view(-1))
             total_loss += loss.item()
 
-            summaries = model.model.generate(input_ids=input_ids, attention_mask=attention_mask)
+            summaries = model.generate(input_ids=input_ids, attention_mask=attention_mask)
             decoded_summaries = [model.tokenizer.decode(s, skip_special_tokens=True) for s in summaries]
             decoded_labels = [model.tokenizer.decode(l, skip_special_tokens=True) for l in labels]
 
@@ -68,15 +69,12 @@ def evaluate(model, val_loader):
     print(f"ROUGE Scores: {rouge_scores}")
     return avg_val_loss, rouge_scores
 
-def load_model(model_path, model_type='t5'):
-    if model_type == 't5':
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = T5ForConditionalGeneration.from_pretrained('t5-small')
-    elif model_type == 'bart':
+def load_model(model_path, model_type='bart'):
+    if model_type == 'bart':
         tokenizer = BartTokenizer.from_pretrained('facebook/bart-base')
-        model = BartForConditionalGeneration.from_pretrained('facebook/bart-base')
+        model = EnhancedBartSummarizer('facebook/bart-base')
     else:
-        raise ValueError("Unsupported model type. Use 't5' or 'bart'")
+        raise ValueError("Unsupported model type. Use 'bart'")
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.load_state_dict(torch.load(model_path, map_location=device))
@@ -84,11 +82,8 @@ def load_model(model_path, model_type='t5'):
     model.eval()
     return model, tokenizer, device
 
-def generate_summary(model, tokenizer, device, text, model_type='t5', max_length=150):
-    if model_type == 't5':
-        prefix = "summarize: "
-    else:  # bart
-        prefix = "summarize: "
+def generate_summary(model, tokenizer, device, text, model_type='bart', max_length=150):
+    prefix = "summarize: "
     
     inputs = tokenizer.encode(prefix + text, return_tensors="pt", max_length=512, truncation=True).to(device)
     summary_ids = model.generate(inputs, max_length=max_length, min_length=30, length_penalty=2.0, num_beams=4, early_stopping=True)
@@ -97,7 +92,7 @@ def generate_summary(model, tokenizer, device, text, model_type='t5', max_length
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_type', type=str, choices=['t5', 'bart'], default='t5')
+    parser.add_argument('--model_type', type=str, choices=['bart'], default='bart')
     args = parser.parse_args()
 
     # Load preprocessed data
@@ -119,18 +114,18 @@ if __name__ == "__main__":
     print(f"Validation set size: {len(val_df)}")
 
     # Create datasets
-    summarizer = BartSummarizer()
+    summarizer = TextSummarizer(model_name='facebook/bart-base')
     train_dataset = SummarizationDataset(train_df, summarizer.tokenizer)
     val_dataset = SummarizationDataset(val_df, summarizer.tokenizer)
     
     train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=8)
 
-    model_path = 'flan_t5_model_epoch_15.pt'
+    model_path = 'enhanced_bart_model_epoch_15.pt'
     if os.path.exists(model_path):
         print(f"Model file {model_path} found. Loading and evaluating the model.")
         summarizer.model.load_state_dict(torch.load(model_path, map_location=summarizer.device))
-        summarizer.evaluate(val_loader)
+        evaluate(summarizer.model, val_loader)
     else:
         print(f"Model file {model_path} not found. Training the model.")
         summarizer.fine_tune(train_dataset, val_dataset, epochs=15, batch_size=8, learning_rate=1e-5)
