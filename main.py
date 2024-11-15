@@ -6,7 +6,7 @@ from transformers import AdamW
 from rouge_score import rouge_scorer
 from model import TextSummarizer, SummarizationDataset
 from transformers import T5ForConditionalGeneration, T5Tokenizer, AdamW
-
+import matplotlib.pyplot as plt
 
 def train(model, train_loader, optimizer):
     model.model.train()
@@ -26,6 +26,7 @@ def train(model, train_loader, optimizer):
 
     avg_train_loss = total_loss / len(train_loader)
     print(f"Training Loss: {avg_train_loss}")
+    return avg_train_loss
 
 def evaluate(model, val_loader):
     model.model.eval()
@@ -63,6 +64,7 @@ def evaluate(model, val_loader):
 
     print(f"Validation Loss: {avg_val_loss}")
     print(f"ROUGE Scores: {rouge_scores}")
+    return avg_val_loss, rouge_scores
 
 def load_model(model_path, model_name='google/flan-t5-small'):
     tokenizer = T5Tokenizer.from_pretrained(model_name)
@@ -78,7 +80,7 @@ if __name__ == "__main__":
     df = pd.read_csv('preprocessed_data.csv')
 
     # Use only 20% of the dataset for fine-tuning
-    sample_df = df.sample(frac=0.5, random_state=42)
+    sample_df = df.sample(frac=1, random_state=42)
 
     # Print the size of the dataset
     print(f"Total dataset size: {len(df)}")
@@ -107,5 +109,38 @@ if __name__ == "__main__":
         evaluate(summarizer, val_loader)
     else:
         print(f"Model file {model_path} not found. Training the model.")
-        summarizer.fine_tune(train_dataset, val_dataset, epochs=15, batch_size=8, learning_rate=1e-5)
-        evaluate(summarizer, val_loader)
+        train_losses = []
+        val_losses = []
+        rouge1_scores = []
+        rougeL_scores = []
+
+        for epoch in range(15):
+            train_loss = train(summarizer, train_loader, AdamW(summarizer.model.parameters(), lr=1e-5))
+            val_loss, rouge_scores = evaluate(summarizer, val_loader)
+
+            train_losses.append(train_loss)
+            val_losses.append(val_loss)
+            rouge1_scores.append(rouge_scores['rouge1'])
+            rougeL_scores.append(rouge_scores['rougeL'])
+
+            summarizer.save_model(epoch + 1)
+
+        # Plot training and validation losses
+        plt.figure(figsize=(10, 5))
+        plt.plot(range(1, len(train_losses) + 1), train_losses, label='Training Loss')
+        plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss')
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.title('Training and Validation Losses')
+        plt.legend()
+        plt.show()
+
+        # Plot ROUGE scores
+        plt.figure(figsize=(10, 5))
+        plt.plot(range(1, len(rouge1_scores) + 1), rouge1_scores, label='ROUGE-1')
+        plt.plot(range(1, len(rougeL_scores) + 1), rougeL_scores, label='ROUGE-L')
+        plt.xlabel('Epochs')
+        plt.ylabel('ROUGE Score')
+        plt.title('ROUGE Scores')
+        plt.legend()
+        plt.show()
