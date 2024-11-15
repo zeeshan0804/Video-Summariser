@@ -11,6 +11,12 @@ from transformers import BartForConditionalGeneration, BartTokenizer
 import matplotlib.pyplot as plt
 import argparse
 
+model_name = "chinhon/bart-large-cnn-summarizer_03"
+tokenizer = BartTokenizer.from_pretrained(model_name)
+model = BartForConditionalGeneration.from_pretrained(model_name)
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model.to(device)
+
 def train(model, train_loader, optimizer):
     model.train()
     total_loss = 0
@@ -44,15 +50,16 @@ def evaluate(model, val_loader):
             attention_mask = batch['attention_mask'].to(model.device)
             labels = batch['labels'].to(model.device)
 
-            logits = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            loss = nn.CrossEntropyLoss()(logits.view(-1, logits.size(-1)), labels.view(-1))
-            total_loss += loss.item()
+            # logits = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            # loss = nn.CrossEntropyLoss()(logits.view(-1, logits.size(-1)), labels.view(-1))
+            # total_loss += loss.item()
 
             summaries = model.generate(input_ids=input_ids, attention_mask=attention_mask)
             decoded_summaries = [model.tokenizer.decode(s, skip_special_tokens=True) for s in summaries]
             decoded_labels = [model.tokenizer.decode(l, skip_special_tokens=True) for l in labels]
 
             all_hypotheses.extend(decoded_summaries)
+            print(decoded_summaries)
             all_references.extend(decoded_labels)
 
     avg_val_loss = total_loss / len(val_loader)
@@ -120,6 +127,7 @@ if __name__ == "__main__":
     
     train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=8)
+    evaluate(model, val_loader)
 
     model_path = 'enhanced_bart_model_epoch_15.pt'
     if os.path.exists(model_path):
