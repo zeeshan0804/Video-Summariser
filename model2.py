@@ -81,25 +81,25 @@ class BartSummarizer:
                 print("Early stopping triggered")
                 break
             
-        # Plot training and validation losses
-        plt.figure(figsize=(10, 5))
-        plt.plot(range(1, len(train_losses) + 1), train_losses, label='Training Loss')
-        plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss')
-        plt.xlabel('Epochs')
-        plt.ylabel('Loss')
-        plt.title('Training and Validation Losses')
-        plt.legend()
-        plt.show()
+            # Plot training and validation losses
+            plt.figure(figsize=(10, 5))
+            plt.plot(range(1, len(train_losses) + 1), train_losses, label='Training Loss')
+            plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss')
+            plt.xlabel('Epochs')
+            plt.ylabel('Loss')
+            plt.title('Training and Validation Losses')
+            plt.legend()
+            plt.show()
 
-        # Plot ROUGE scores
-        plt.figure(figsize=(10, 5))
-        plt.plot(range(1, len(rouge1_scores) + 1), rouge1_scores, label='ROUGE-1')
-        plt.plot(range(1, len(rougeL_scores) + 1), rougeL_scores, label='ROUGE-L')
-        plt.xlabel('Epochs')
-        plt.ylabel('ROUGE Score')
-        plt.title('ROUGE Scores')
-        plt.legend()
-        plt.show()
+            # Plot ROUGE scores
+            plt.figure(figsize=(10, 5))
+            plt.plot(range(1, len(rouge1_scores) + 1), rouge1_scores, label='ROUGE-1')
+            plt.plot(range(1, len(rougeL_scores) + 1), rougeL_scores, label='ROUGE-L')
+            plt.xlabel('Epochs')
+            plt.ylabel('ROUGE Score')
+            plt.title('ROUGE Scores')
+            plt.legend()
+            plt.show()
 
     def evaluate(self, val_loader):
         self.model.eval()
