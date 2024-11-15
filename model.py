@@ -6,7 +6,7 @@ from transformers import get_linear_schedule_with_warmup
 import matplotlib.pyplot as plt
 
 class TextSummarizer:
-    def __init__(self, model_name='google/flan-t5-small'):
+    def __init__(self, model_name='t5-small'):
         self.tokenizer = T5Tokenizer.from_pretrained(model_name)
         self.model = T5ForConditionalGeneration.from_pretrained(model_name)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -176,3 +176,4 @@ class SummarizationDataset(Dataset):
             'attention_mask': inputs['attention_mask'].flatten(),
             'labels': labels['input_ids'].flatten()
         }
+        
