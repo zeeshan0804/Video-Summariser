@@ -81,7 +81,7 @@ if __name__ == "__main__":
     df = pd.read_csv('preprocessed_data.csv')
 
     # Use only 20% of the dataset for fine-tuning
-    sample_df = df.sample(frac=0.2, random_state=42)
+    sample_df = df.sample(frac=0.4, random_state=42)
 
     # Print the size of the dataset
     print(f"Total dataset size: {len(df)}")
@@ -110,5 +110,5 @@ if __name__ == "__main__":
         evaluate(summarizer, val_loader)
     else:
         print(f"Model file {model_path} not found. Training the model.")
-        summarizer.fine_tune(train_dataset, val_dataset, epochs=15, batch_size=8, learning_rate=1e-5)
+        summarizer.fine_tune(train_dataset, val_dataset, epochs=15, batch_size=8, learning_rate=2e-5)
         evaluate(summarizer, val_loader)

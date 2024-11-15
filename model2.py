@@ -1,6 +1,6 @@
 import torch
-from rouge_score import rouge_scorer
 from torch.utils.data import Dataset, DataLoader
+from rouge_score import rouge_scorer
 from transformers import BartForConditionalGeneration, BartTokenizer, AdamW
 from transformers import get_linear_schedule_with_warmup
 
@@ -24,7 +24,7 @@ class BartSummarizer:
         summary = self.tokenizer.decode(summary_ids[0], skip_special_tokens=True)
         return summary
 
-    def fine_tune(self, train_dataset, val_dataset, epochs=3, batch_size=8, learning_rate=5e-5):
+    def fine_tune(self, train_dataset, val_dataset, epochs=3, batch_size=8, learning_rate=5e-5, early_stopping_patience=3):
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
@@ -32,6 +32,9 @@ class BartSummarizer:
         total_steps = len(train_loader) * epochs
         scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
         self.model.train()
+
+        best_rougeL = 0
+        patience_counter = 0
 
         for epoch in range(epochs):
             total_loss = 0
@@ -52,8 +55,20 @@ class BartSummarizer:
             avg_train_loss = total_loss / len(train_loader)
             print(f"Epoch {epoch + 1}, Training Loss: {avg_train_loss}")
 
-            self.evaluate(val_loader)
-            self.save_model(epoch + 1)
+            val_loss, rouge_scores = self.evaluate(val_loader)
+            print(f"Validation Loss: {val_loss}")
+            print(f"ROUGE Scores: {rouge_scores}")
+
+            if rouge_scores['rougeL'] > best_rougeL:
+                best_rougeL = rouge_scores['rougeL']
+                patience_counter = 0
+                self.save_model(epoch + 1)
+            else:
+                patience_counter += 1
+
+            if patience_counter >= early_stopping_patience:
+                print("Early stopping triggered")
+                break
 
     def evaluate(self, val_loader):
         self.model.eval()
@@ -89,8 +104,7 @@ class BartSummarizer:
         for key in rouge_scores:
             rouge_scores[key] /= len(all_hypotheses)
 
-        print(f"Validation Loss: {avg_val_loss}")
-        print(f"ROUGE Scores: {rouge_scores}")
+        return avg_val_loss, rouge_scores
 
     def save_model(self, epoch):
         model_save_path = f"bart_model_epoch_{epoch}.pt"
