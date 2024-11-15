@@ -106,41 +106,7 @@ if __name__ == "__main__":
     if os.path.exists(model_path):
         print(f"Model file {model_path} found. Loading and evaluating the model.")
         summarizer.model.load_state_dict(torch.load(model_path, map_location=summarizer.device))
-        evaluate(summarizer, val_loader)
+        summarizer.evaluate(val_loader)
     else:
         print(f"Model file {model_path} not found. Training the model.")
-        train_losses = []
-        val_losses = []
-        rouge1_scores = []
-        rougeL_scores = []
-
-        for epoch in range(15):
-            train_loss = train(summarizer, train_loader, AdamW(summarizer.model.parameters(), lr=1e-5))
-            val_loss, rouge_scores = evaluate(summarizer, val_loader)
-
-            train_losses.append(train_loss)
-            val_losses.append(val_loss)
-            rouge1_scores.append(rouge_scores['rouge1'])
-            rougeL_scores.append(rouge_scores['rougeL'])
-
-            summarizer.save_model(epoch + 1)
-
-        # Plot training and validation losses
-        plt.figure(figsize=(10, 5))
-        plt.plot(range(1, len(train_losses) + 1), train_losses, label='Training Loss')
-        plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss')
-        plt.xlabel('Epochs')
-        plt.ylabel('Loss')
-        plt.title('Training and Validation Losses')
-        plt.legend()
-        plt.show()
-
-        # Plot ROUGE scores
-        plt.figure(figsize=(10, 5))
-        plt.plot(range(1, len(rouge1_scores) + 1), rouge1_scores, label='ROUGE-1')
-        plt.plot(range(1, len(rougeL_scores) + 1), rougeL_scores, label='ROUGE-L')
-        plt.xlabel('Epochs')
-        plt.ylabel('ROUGE Score')
-        plt.title('ROUGE Scores')
-        plt.legend()
-        plt.show()
+        summarizer.fine_tune(train_dataset, val_dataset, epochs=15, batch_size=8, learning_rate=1e-5)

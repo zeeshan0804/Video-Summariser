@@ -3,6 +3,7 @@ from torch.utils.data import Dataset, DataLoader
 from transformers import T5ForConditionalGeneration, T5Tokenizer, AdamW
 from rouge_score import rouge_scorer
 from transformers import get_linear_schedule_with_warmup
+import matplotlib.pyplot as plt
 
 class TextSummarizer:
     def __init__(self, model_name='google/flan-t5-small'):
@@ -36,6 +37,11 @@ class TextSummarizer:
         best_rougeL = 0
         patience_counter = 0
 
+        train_losses = []
+        val_losses = []
+        rouge1_scores = []
+        rougeL_scores = []
+
         for epoch in range(epochs):
             total_loss = 0
             for batch in train_loader:
@@ -59,6 +65,11 @@ class TextSummarizer:
             print(f"Validation Loss: {val_loss}")
             print(f"ROUGE Scores: {rouge_scores}")
 
+            train_losses.append(avg_train_loss)
+            val_losses.append(val_loss)
+            rouge1_scores.append(rouge_scores['rouge1'])
+            rougeL_scores.append(rouge_scores['rougeL'])
+
             if rouge_scores['rougeL'] > best_rougeL:
                 best_rougeL = rouge_scores['rougeL']
                 patience_counter = 0
@@ -69,6 +80,26 @@ class TextSummarizer:
             if patience_counter >= early_stopping_patience:
                 print("Early stopping triggered")
                 break
+
+        # Plot training and validation losses
+        plt.figure(figsize=(10, 5))
+        plt.plot(range(1, len(train_losses) + 1), train_losses, label='Training Loss')
+        plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss')
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.title('Training and Validation Losses')
+        plt.legend()
+        plt.show()
+
+        # Plot ROUGE scores
+        plt.figure(figsize=(10, 5))
+        plt.plot(range(1, len(rouge1_scores) + 1), rouge1_scores, label='ROUGE-1')
+        plt.plot(range(1, len(rougeL_scores) + 1), rougeL_scores, label='ROUGE-L')
+        plt.xlabel('Epochs')
+        plt.ylabel('ROUGE Score')
+        plt.title('ROUGE Scores')
+        plt.legend()
+        plt.show()
 
     def evaluate(self, val_loader):
         self.model.eval()
