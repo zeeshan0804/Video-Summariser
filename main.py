@@ -176,4 +176,4 @@ if __name__ == "__main__":
         evaluate(summarizer.model, val_loader)
     else:
         print(f"Model file {model_path} not found. Training the model.")
-        summarizer.fine_tune(train_dataset, val_dataset, epochs=15, batch_size=8, learning_rate=1e-5)
+        summarizer.fine_tune(train_dataset, val_dataset, epochs=15, batch_size=4, learning_rate=1e-5)
