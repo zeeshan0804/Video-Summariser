@@ -143,7 +143,7 @@ class TextSummarizer:
         print(f"Model saved to {model_save_path}")
 
 class SummarizationDataset(Dataset):
-    def __init__(self, dataframe, tokenizer, max_length=512):
+    def __init__(self, dataframe, tokenizer, max_length=1024):
         self.dataframe = dataframe
         self.tokenizer = tokenizer
         self.max_length = max_length

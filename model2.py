@@ -6,7 +6,7 @@ from transformers import get_linear_schedule_with_warmup
 import matplotlib.pyplot as plt
 
 class BartSummarizer:
-    def __init__(self, model_name='facebook/bart-base'):
+    def __init__(self, model_name='chinhon/bart-large-cnn-summarizer_03'):
         self.tokenizer = BartTokenizer.from_pretrained(model_name)
         self.model = BartForConditionalGeneration.from_pretrained(model_name)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

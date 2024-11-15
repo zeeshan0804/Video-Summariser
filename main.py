@@ -6,16 +6,17 @@ from torch.utils.data import DataLoader
 from transformers import AdamW
 from rouge_score import rouge_scorer
 from model import TextSummarizer, SummarizationDataset
+from model2 import BartSummarizer
 from model3 import EnhancedBartSummarizer, TextSummarizer
 from transformers import BartForConditionalGeneration, BartTokenizer
 import matplotlib.pyplot as plt
 import argparse
 
-model_name = "chinhon/bart-large-cnn-summarizer_03"
-tokenizer = BartTokenizer.from_pretrained(model_name)
-model = BartForConditionalGeneration.from_pretrained(model_name)
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model.to(device)
+# model_name = "chinhon/bart-large-cnn-summarizer_03"
+# tokenizer = BartTokenizer.from_pretrained(model_name)
+# model = BartForConditionalGeneration.from_pretrained(model_name)
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# model.to(device)
 
 def train(model, train_loader, optimizer):
     model.train()
@@ -50,9 +51,9 @@ def evaluate(model, val_loader):
             attention_mask = batch['attention_mask'].to(model.device)
             labels = batch['labels'].to(model.device)
 
-            # logits = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            # loss = nn.CrossEntropyLoss()(logits.view(-1, logits.size(-1)), labels.view(-1))
-            # total_loss += loss.item()
+            logits = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            loss = nn.CrossEntropyLoss()(logits.view(-1, logits.size(-1)), labels.view(-1))
+            total_loss += loss.item()
 
             summaries = model.generate(input_ids=input_ids, attention_mask=attention_mask)
             decoded_summaries = [model.tokenizer.decode(s, skip_special_tokens=True) for s in summaries]
@@ -76,44 +77,44 @@ def evaluate(model, val_loader):
     print(f"ROUGE Scores: {rouge_scores}")
     return avg_val_loss, rouge_scores
 
-def evaluatenew(model, val_loader):
-    model.eval()
-    total_loss = 0
-    rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
-    all_hypotheses = []
-    all_references = []
+# def evaluatenew(model, val_loader):
+#     model.eval()
+#     total_loss = 0
+#     rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
+#     all_hypotheses = []
+#     all_references = []
 
-    with torch.no_grad():
-        for batch in val_loader:
-            input_ids = batch['input_ids'].to(model.device)
-            attention_mask = batch['attention_mask'].to(model.device)
-            labels = batch['labels'].to(model.device)
+#     with torch.no_grad():
+#         for batch in val_loader:
+#             input_ids = batch['input_ids'].to(model.device)
+#             attention_mask = batch['attention_mask'].to(model.device)
+#             labels = batch['labels'].to(model.device)
 
-            # logits = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            # loss = nn.CrossEntropyLoss()(logits.view(-1, logits.size(-1)), labels.view(-1))
-            # total_loss += loss.item()
+#             # logits = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+#             # loss = nn.CrossEntropyLoss()(logits.view(-1, logits.size(-1)), labels.view(-1))
+#             # total_loss += loss.item()
 
-            summaries = model.generate(input_ids=input_ids, attention_mask=attention_mask)
-            decoded_summaries = [tokenizer.decode(s, skip_special_tokens=True) for s in summaries]
-            decoded_labels = [tokenizer.decode(l, skip_special_tokens=True) for l in labels]
+#             summaries = model.generate(input_ids=input_ids, attention_mask=attention_mask)
+#             decoded_summaries = [modeltokenizer.decode(s, skip_special_tokens=True) for s in summaries]
+#             decoded_labels = [tokenizer.decode(l, skip_special_tokens=True) for l in labels]
 
-            all_hypotheses.extend(decoded_summaries)
-            print(decoded_summaries)
-            all_references.extend(decoded_labels)
+#             all_hypotheses.extend(decoded_summaries)
+#             print(decoded_summaries)
+#             all_references.extend(decoded_labels)
 
-    avg_val_loss = total_loss / len(val_loader)
-    rouge_scores = {key: 0 for key in rouge.score(all_hypotheses[0], all_references[0]).keys()}
-    for hyp, ref in zip(all_hypotheses, all_references):
-        scores = rouge.score(hyp, ref)
-        for key in scores:
-            rouge_scores[key] += scores[key].fmeasure
+#     avg_val_loss = total_loss / len(val_loader)
+#     rouge_scores = {key: 0 for key in rouge.score(all_hypotheses[0], all_references[0]).keys()}
+#     for hyp, ref in zip(all_hypotheses, all_references):
+#         scores = rouge.score(hyp, ref)
+#         for key in scores:
+#             rouge_scores[key] += scores[key].fmeasure
 
-    for key in rouge_scores:
-        rouge_scores[key] /= len(all_hypotheses)
+#     for key in rouge_scores:
+#         rouge_scores[key] /= len(all_hypotheses)
 
-    print(f"Validation Loss: {avg_val_loss}")
-    print(f"ROUGE Scores: {rouge_scores}")
-    return avg_val_loss, rouge_scores
+#     print(f"Validation Loss: {avg_val_loss}")
+#     print(f"ROUGE Scores: {rouge_scores}")
+#     return avg_val_loss, rouge_scores
 
 def load_model(model_path, model_type='bart'):
     if model_type == 'bart':
@@ -160,13 +161,13 @@ if __name__ == "__main__":
     print(f"Validation set size: {len(val_df)}")
 
     # Create datasets
-    summarizer = TextSummarizer(model_name='facebook/bart-base')
+    summarizer = BartSummarizer()
     train_dataset = SummarizationDataset(train_df, summarizer.tokenizer)
     val_dataset = SummarizationDataset(val_df, summarizer.tokenizer)
     
     train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=8)
-    evaluatenew(model, val_loader)
+    # evaluatenew(model, val_loader)
 
     model_path = 'enhanced_bart_model_epoch_15.pt'
     if os.path.exists(model_path):
