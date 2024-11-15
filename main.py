@@ -5,6 +5,8 @@ from torch.utils.data import DataLoader
 from transformers import AdamW
 from rouge_score import rouge_scorer
 from model import TextSummarizer, SummarizationDataset
+from transformers import T5ForConditionalGeneration, T5Tokenizer, AdamW
+
 
 def train(model, train_loader, optimizer):
     model.model.train()
@@ -76,7 +78,7 @@ if __name__ == "__main__":
     df = pd.read_csv('preprocessed_data.csv')
 
     # Use only 20% of the dataset for fine-tuning
-    sample_df = df.sample(frac=0.2, random_state=42)
+    sample_df = df.sample(frac=0.5, random_state=42)
 
     # Print the size of the dataset
     print(f"Total dataset size: {len(df)}")
