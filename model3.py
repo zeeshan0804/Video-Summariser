@@ -7,7 +7,7 @@ from transformers import get_linear_schedule_with_warmup
 import matplotlib.pyplot as plt
 
 class EnhancedBartSummarizer(nn.Module):
-    def __init__(self, model_name='facebook/bart-base'):
+    def __init__(self, model_name='facebook/bart-large-cnn'):
         super(EnhancedBartSummarizer, self).__init__()
         self.bart = BartForConditionalGeneration.from_pretrained(model_name)
         self.cnn = nn.Conv1d(in_channels=self.bart.config.d_model, out_channels=512, kernel_size=3, padding=1)
