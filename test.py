@@ -86,7 +86,7 @@ if __name__ == "__main__":
     print(f"Validation set size: {len(val_df)}")
 
     # Create datasets
-    model_name = "jordiclive/flan-t5-3b-summarizer"
+    model_name = "mradermacher/Llama-3.2-3B-yt-summarizer-GGUF"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     train_dataset = SummarizationDataset(train_df, tokenizer)
     val_dataset = SummarizationDataset(val_df, tokenizer)
