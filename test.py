@@ -33,26 +33,30 @@ def test_flan_model(model_name, test_loader):
     # Evaluate model
     with torch.no_grad():
         for batch in test_loader:
-            input_texts = batch['input_text']  # Original text
-            target_texts = batch['target_text']  # Reference summaries
+            input_ids = batch['input_ids'].to(model.device)
+            attention_mask = batch['attention_mask'].to(model.device)
+            labels = batch['labels'].to(model.device)
 
-            # Tokenize inputs and move to device
-            inputs = tokenizer(input_texts, return_tensors="pt", padding=True, truncation=True, max_length=512).to(device)
+            # # Tokenize inputs and move to device
+            # inputs = tokenizer(input_texts, return_tensors="pt", padding=True, truncation=True, max_length=512).to(device)
 
-            # Generate summaries
-            summaries = model.generate(
-                inputs.input_ids, 
-                max_length=150, 
-                num_beams=4, 
-                early_stopping=True
-            )
+            # # # Generate summaries
+            # summaries = model.generate(
+            #     inputs.input_ids, 
+            #     max_length=150, 
+            #     num_beams=4, 
+            #     early_stopping=True
+            # )
 
             # Decode generated summaries
+            # decoded_summaries = [tokenizer.decode(s, skip_special_tokens=True) for s in summaries]
+            summaries = model.generate(input_ids=input_ids, attention_mask=attention_mask)
             decoded_summaries = [tokenizer.decode(s, skip_special_tokens=True) for s in summaries]
+            decoded_labels = [tokenizer.decode(l, skip_special_tokens=True) for l in labels]
 
             # Append results
             all_hypotheses.extend(decoded_summaries)
-            all_references.extend(target_texts)
+            all_references.extend(decoded_labels)
 
     # Calculate ROUGE scores
     rouge_scores = {key: 0 for key in rouge.score(all_hypotheses[0], all_references[0]).keys()}
