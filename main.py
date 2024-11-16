@@ -119,7 +119,7 @@ def evaluate(model, val_loader):
 def load_model(model_path, model_type='bart'):
     if model_type == 'bart':
         tokenizer = BartTokenizer.from_pretrained('facebook/bart-base')
-        model = EnhancedBartSummarizer('facebook/bart-base')
+        model = BartSummarizer('facebook/bart-base')
     else:
         raise ValueError("Unsupported model type. Use 'bart'")
 
@@ -169,7 +169,7 @@ if __name__ == "__main__":
     print(f"Validation set size: {len(val_df)}")
 
     # Create datasets
-    summarizer =  BertSummarizer()
+    summarizer =  BartSummarizer()
     train_dataset = SummarizationDataset(train_df, summarizer.tokenizer)
     val_dataset = SummarizationDataset(val_df, summarizer.tokenizer)
     

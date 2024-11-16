@@ -6,7 +6,7 @@ from transformers import get_linear_schedule_with_warmup
 import matplotlib.pyplot as plt
 
 class BartSummarizer:
-    def __init__(self, model_name='chinhon/bart-large-cnn-summarizer_03'):
+    def __init__(self, model_name='facebook/bart-large-cnn'):
         self.tokenizer = BartTokenizer.from_pretrained(model_name)
         self.model = BartForConditionalGeneration.from_pretrained(model_name)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -32,7 +32,7 @@ class BartSummarizer:
         optimizer = AdamW(self.model.parameters(), lr=learning_rate)
         total_steps = len(train_loader) * epochs
         scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
-        self.model.train()
+        # self.model.train()
 
         best_rougeL = 0
         patience_counter = 0
@@ -42,6 +42,7 @@ class BartSummarizer:
         rougeL_scores = []
 
         for epoch in range(epochs):
+            self.model.train()
             total_loss = 0
             for batch in train_loader:
                 optimizer.zero_grad()
