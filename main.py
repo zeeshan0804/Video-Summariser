@@ -132,6 +132,14 @@ def load_model(model_path, model_type='bart'):
 def generate_summary(model, tokenizer, device, text, model_type='bart', max_length=150):
     prefix = "summarize: "
     
+    inputs = tokenizer.encode(prefix + text, return_tensors="pt").to(device)
+    summary_ids = model.generate(inputs)
+    summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+    return summary
+
+def generate_summary_old(model, tokenizer, device, text, model_type='bart', max_length=150):
+    prefix = "summarize: "
+    
     inputs = tokenizer.encode(prefix + text, return_tensors="pt", max_length=512, truncation=True).to(device)
     summary_ids = model.generate(inputs, max_length=max_length, min_length=30, length_penalty=2.0, num_beams=4, early_stopping=True)
     summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
