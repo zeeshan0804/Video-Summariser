@@ -86,7 +86,7 @@ if __name__ == "__main__":
     print(f"Validation set size: {len(val_df)}")
 
     # Create datasets
-    model_name = "spacemanidol/flan-t5-large-website-summarizer"
+    model_name = "jordiclive/flan-t5-3b-summarizer"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     train_dataset = SummarizationDataset(train_df, tokenizer)
     val_dataset = SummarizationDataset(val_df, tokenizer)
