@@ -56,7 +56,7 @@ class TextSummarizer:
         optimizer = AdamW(self.model.parameters(), lr=learning_rate)
         total_steps = len(train_loader) * epochs
         scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
-        self.model.train()
+        # self.model.train()
 
         best_rougeL = 0
         patience_counter = 0
@@ -67,6 +67,7 @@ class TextSummarizer:
         rougeL_scores = []
 
         for epoch in range(epochs):
+            self.model.train()
             total_loss = 0
             for batch in train_loader:
                 optimizer.zero_grad()
