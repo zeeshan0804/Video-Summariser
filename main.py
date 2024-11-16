@@ -5,9 +5,9 @@ import torch
 from torch.utils.data import DataLoader
 from transformers import AdamW
 from rouge_score import rouge_scorer
-# from model import TextSummarizer, SummarizationDataset
+from model import BertSummarizer, SummarizationDataset
 from model2 import BartSummarizer
-from model3 import EnhancedBartSummarizer, TextSummarizer, SummarizationDataset
+# from model3 import EnhancedBartSummarizer, TextSummarizer, SummarizationDataset
 from transformers import BartForConditionalGeneration, BartTokenizer
 import matplotlib.pyplot as plt
 import argparse
@@ -169,7 +169,7 @@ if __name__ == "__main__":
     print(f"Validation set size: {len(val_df)}")
 
     # Create datasets
-    summarizer =  TextSummarizer()
+    summarizer =  BertSummarizer()
     train_dataset = SummarizationDataset(train_df, summarizer.tokenizer)
     val_dataset = SummarizationDataset(val_df, summarizer.tokenizer)
     

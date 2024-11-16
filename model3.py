@@ -163,7 +163,7 @@ class TextSummarizer:
         return avg_val_loss, rouge_scores
 
     def save_model(self, epoch):
-        model_save_path = f"enhanced_bart_model_epoch_{epoch}.pt"
+        model_save_path = f"enhanced_bart_large_model_epoch_{epoch}.pt"
         torch.save(self.model.state_dict(), model_save_path)
         print(f"Model saved to {model_save_path}")
 
